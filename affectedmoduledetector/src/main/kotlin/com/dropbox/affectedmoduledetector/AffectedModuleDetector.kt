@@ -404,10 +404,12 @@ class AffectedModuleDetectorImpl constructor(
      * Also populates the unknownFiles var which is used in findAffectedProjects
      */
     private fun findChangedProjects(): Set<Project> {
-        val lastMasterCommitSha = git.findLastMasterCommit() ?: return allProjects
+        val parentBranch = git.findParentBranch()
+        val currentBranch = git.findCurrentBranch()
+
         val changedFiles = git.findChangedFilesSince(
-            sha = lastMasterCommitSha,
-            includeUncommitted = true
+            currentBranch = currentBranch,
+            parentBranch = parentBranch
         )
 
         val changedProjects = mutableSetOf<Project>()

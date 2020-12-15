@@ -26,11 +26,13 @@ import org.gradle.api.logging.Logger
 
 interface GitClient {
     fun findChangedFilesSince(
-        sha: Sha,
-        top: Sha = "HEAD",
-        includeUncommitted: Boolean = false
+        currentBranch: String,
+        parentBranch: String
     ): List<String>
     fun findLastMasterCommit(): Sha?
+
+    fun findParentBranch(): String
+    fun findCurrentBranch(): String
 
     fun getGitRoot(): File
 
@@ -71,16 +73,11 @@ internal class GitClientImpl(
      * Finds changed file paths since the given sha
      */
     override fun findChangedFilesSince(
-        sha: Sha,
-        top: Sha,
-        includeUncommitted: Boolean
+        currentBranch: String,
+        parentBranch: String
     ): List<String> {
-        // use this if we don't want local changes
-        return commandRunner.executeAndParse(if (includeUncommitted) {
-            "$CHANGED_FILES_CMD_PREFIX HEAD..$sha"
-        } else {
-            "$CHANGED_FILES_CMD_PREFIX $top $sha"
-        })
+        val forkedCommitSha = commandRunner.executeAndParse("$NEAREST_COMMON_ANCESTOR_SHA $currentBranch $parentBranch")
+        return commandRunner.executeAndParse("$CHANGED_FILES_CMD_PREFIX HEAD..$forkedCommitSha")
     }
 
     /**
@@ -91,6 +88,12 @@ internal class GitClientImpl(
                 .firstOrNull()
                 ?.split(" ")
                 ?.firstOrNull()
+    }
+    override fun findParentBranch(): String {
+        return commandRunner.execute(PARENT_BRANCH_NAME)
+    }
+    override fun findCurrentBranch(): String {
+        return commandRunner.execute(CURRENT_BRANCH_NAME)
     }
 
     private fun findGitDirInParentFilepath(filepath: File): File? {
@@ -181,6 +184,11 @@ internal class GitClientImpl(
     companion object {
         const val PREV_COMMIT_CMD = "git --no-pager rev-parse HEAD~1"
         const val PREV_MERGE_CMD = "git show-branch -a | grep '\\*' | grep -v `git rev-parse --abbrev-ref HEAD` | head -n1 | sed 's/.*\\[\\(.*\\)\\].*/\\1/' | sed 's/[\\^~].*//'"
+
+        const val PARENT_BRANCH_NAME = "git show-branch -a | grep '\\*' | grep -v `git rev-parse --abbrev-ref HEAD` | head -n1 | sed 's/.*\\[\\(.*\\)\\].*/\\1/' | sed 's/[\\^~].*//'"
+        const val CURRENT_BRANCH_NAME = "git rev-parse --abbrev-ref HEAD"
+        const val NEAREST_COMMON_ANCESTOR_SHA = "git merge-base"
+
         const val LAST_MASTER_COMMIT_CMD = "git log -n 1 master --format=format:\"%H\""
         const val CHANGED_FILES_CMD_PREFIX = "git --no-pager diff --name-only"
     }
